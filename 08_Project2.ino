@@ -1,5 +1,6 @@
 #define BLYNK_PRINT Serial
 
+#include <WiFiManager.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <BlynkSimpleEsp32.h>
@@ -7,9 +8,9 @@
 #include "esp_system.h"
 
 hw_timer_t *timer = NULL;
-void IRAM_ATTR resetModule(){
-    ets_printf("reboot\n");
-    esp_restart();
+void IRAM_ATTR resetModule() {
+  ets_printf("reboot\n");
+  esp_restart();
 }
 
 // You should get Auth Token in the Blynk App.
@@ -41,44 +42,57 @@ char auth[] = "---------------Auth Token----------------";
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+#define TRIGGER_PIN 0
+int timeout = 120;
+
 const int Led_Flash = 4;
 const int Led_run = 13;
 int PIR_Sensor = 12;
-int pinSensor = 0 ,pinFlash = 0 ,Cam_capture = 0 ,time_capture=0;
+int pinSensor = 0 , pinFlash = 0 , Cam_capture = 0 , time_capture = 0;
 boolean startTimer = false;
-unsigned long time_now=0;
+unsigned long time_now = 0;
 
 // This function will be called every time Slider Widget
 // in Blynk app writes values to the Virtual Pin V1
-BLYNK_WRITE(V1){
+BLYNK_WRITE(V1) {
   Cam_capture = param.asInt();
   // assigning incoming value from pin V1 to a variable
   // process received value
 }
-BLYNK_WRITE(V2){  
-   pinSensor = param.asInt();
+BLYNK_WRITE(V2) {
+  pinSensor = param.asInt();
 }
-BLYNK_WRITE(V3){  
-   pinFlash = param.asInt();
+BLYNK_WRITE(V3) {
+  pinFlash = param.asInt();
 }
 void setup()
 {
   Serial.begin(115200);
-   while (!Serial) {  ;  }
+  while (!Serial) {
+    ;
+  }
+  WiFi.mode(WIFI_STA);
+  Serial.begin(115200);
+  Serial.println("\n Starting");
+  pinMode(TRIGGER_PIN, INPUT_PULLUP);
+
   pinMode(Led_Flash, OUTPUT);
   pinMode(Led_run, OUTPUT);
   WiFi.begin(SSID, PASSWORD);
   Serial.printf("WiFi connecting to %s\n",  SSID);
-  while(WiFi.status() != WL_CONNECTED) { Serial.print("."); delay(400); }
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(400);
+  }
   Serial.printf("\nWiFi connected\nIP : ");
-  Serial.println(WiFi.localIP());  
+  Serial.println(WiFi.localIP());
   LINE.setToken(LINE_TOKEN);
-  Blynk.begin(auth,SSID, PASSWORD);
-  
-    timer = timerBegin(0, 80, true); //timer 0, div 80Mhz 
-    timerAttachInterrupt(timer, &resetModule, true);
-    timerAlarmWrite(timer, 20000000, false); //set time in us 15s
-    timerAlarmEnable(timer); //enable interrupt
+  Blynk.begin(auth, SSID, PASSWORD);
+
+  timer = timerBegin(0, 80, true); //timer 0, div 80Mhz
+  timerAttachInterrupt(timer, &resetModule, true);
+  timerAlarmWrite(timer, 20000000, false); //set time in us 15s
+  timerAlarmEnable(timer); //enable interrupt
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -100,14 +114,14 @@ void setup()
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG; 
-  
-  if(psramFound()){
-// FRAMESIZE_ +
-//QQVGA/160x120//QQVGA2/128x160//QCIF/176x144//HQVGA/240x176
-//QVGA/320x240//CIF/400x296//VGA/640x480//SVGA/800x600//XGA/1024x768
-//SXGA/1280x1024//UXGA/1600x1200//QXGA/2048*1536
-    config.frame_size = FRAMESIZE_VGA; 
+  config.pixel_format = PIXFORMAT_JPEG;
+
+  if (psramFound()) {
+    // FRAMESIZE_ +
+    //QQVGA/160x120//QQVGA2/128x160//QCIF/176x144//HQVGA/240x176
+    //QVGA/320x240//CIF/400x296//VGA/640x480//SVGA/800x600//XGA/1024x768
+    //SXGA/1280x1024//UXGA/1600x1200//QXGA/2048*1536
+    config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
   } else {
@@ -115,7 +129,7 @@ void setup()
     config.jpeg_quality = 12;
     config.fb_count = 1;
   }
-  
+
   // Init Camera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -126,65 +140,86 @@ void setup()
 
 void loop()
 {
-  Blynk.run();
-      timerWrite(timer, 0); //reset timer (feed watchdog)
-    long tme = millis();
-    if(Cam_capture == 1)
-       Camera_capture();
-    if(digitalRead(PIR_Sensor) == 1 && startTimer != true && pinSensor == 1){    
-           Camera_capture();
-           startTimer = true;    
-      }else if(digitalRead(PIR_Sensor) == 0){
-        startTimer = false;   
-        time_capture=0;  
-      }
+  if ( digitalRead(TRIGGER_PIN) == LOW) {
+    WiFiManager wm;
 
-     if(millis() > time_now + 1000) {
-           time_now = millis();
-           digitalWrite(Led_run, HIGH);
-            delay(20);  
-           digitalWrite(Led_run, LOW); 
-          }
-         tme = millis() - tme;
-      if(digitalRead(PIR_Sensor) == 1){
-         if(++time_capture > 60){
-            time_capture=0;
-            Camera_capture();
-            Serial.println("Over Time");
-          }
-        }
-         
-      //Serial.println(digitalRead(PIR_Sensor));
-      delay(200);
+    //reset settings - for testing
+    //wm.resetSettings();
+
+    // set configportal timeout
+    wm.setConfigPortalTimeout(timeout);
+
+    if (!wm.startConfigPortal("OnDemandAP")) {
+      Serial.println("failed to connect and hit timeout");
+      delay(3000);
+      //reset and try again, or maybe put it to deep sleep
+      ESP.restart();
+      delay(5000);
+    }
+
+    //if you get here you have connected to the WiFi
+    Serial.println("connected...yeey :)");
+
+  }
+  Blynk.run();
+  timerWrite(timer, 0); //reset timer (feed watchdog)
+  long tme = millis();
+  if (Cam_capture == 1)
+    Camera_capture();
+  if (digitalRead(PIR_Sensor) == 1 && startTimer != true && pinSensor == 1) {
+    Camera_capture();
+    startTimer = true;
+  } else if (digitalRead(PIR_Sensor) == 0) {
+    startTimer = false;
+    time_capture = 0;
+  }
+
+  if (millis() > time_now + 1000) {
+    time_now = millis();
+    digitalWrite(Led_run, HIGH);
+    delay(20);
+    digitalWrite(Led_run, LOW);
+  }
+  tme = millis() - tme;
+  if (digitalRead(PIR_Sensor) == 1) {
+    if (++time_capture > 60) {
+      time_capture = 0;
+      Camera_capture();
+      Serial.println("Over Time");
+    }
+  }
+
+  //Serial.println(digitalRead(PIR_Sensor));
+  delay(200);
 }
 
 
 void Camera_capture() {
-  if(pinFlash == 1){
-  digitalWrite(Led_Flash, HIGH);
-  delay(100); 
-  digitalWrite(Led_Flash, LOW);
-  delay(100);
-  digitalWrite(Led_Flash, HIGH);
+  if (pinFlash == 1) {
+    digitalWrite(Led_Flash, HIGH);
+    delay(100);
+    digitalWrite(Led_Flash, LOW);
+    delay(100);
+    digitalWrite(Led_Flash, HIGH);
   }
   camera_fb_t * fb = NULL;
-  delay(200); 
+  delay(200);
   // Take Picture with Camera
-  fb = esp_camera_fb_get(); 
-  if(!fb) {
+  fb = esp_camera_fb_get();
+  if (!fb) {
     Serial.println("Camera capture failed");
     return;
   }
-   digitalWrite(Led_Flash, LOW);
-   Send_line(fb->buf,fb->len);
-   esp_camera_fb_return(fb);
-   Serial.println("OK"); 
+  digitalWrite(Led_Flash, LOW);
+  Send_line(fb->buf, fb->len);
+  esp_camera_fb_return(fb);
+  Serial.println("OK");
   // Serial.println("Going to sleep now");
   // esp_deep_sleep_start();
   // Serial.println("This will never be printed");
 
 }
 
-void Send_line(uint8_t *image_data,size_t   image_size){
-   LINE.notifyPicture("ตรวจพบการเคลื่อนไหว",image_data, image_size);
-  }
+void Send_line(uint8_t *image_data, size_t   image_size) {
+  LINE.notifyPicture("ตรวจพบการเคลื่อนไหว", image_data, image_size);
+}
