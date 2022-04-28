@@ -46,7 +46,7 @@ char auth[] = "---------------Auth Token----------------";
 int timeout = 120;
 
 const int Led_Flash = 4;
-const int Led_run = 13;
+const int Sound_run = 13;
 int PIR_Sensor = 12;
 int pinSensor = 0 , pinFlash = 0 , Cam_capture = 0 , time_capture = 0;
 boolean startTimer = false;
@@ -77,7 +77,7 @@ void setup()
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
   pinMode(Led_Flash, OUTPUT);
-  pinMode(Led_run, OUTPUT);
+  pinMode(Sound_run, OUTPUT);
   WiFi.begin(SSID, PASSWORD);
   Serial.printf("WiFi connecting to %s\n",  SSID);
   while (WiFi.status() != WL_CONNECTED) {
@@ -176,9 +176,9 @@ void loop()
 
   if (millis() > time_now + 1000) {
     time_now = millis();
-    digitalWrite(Led_run, HIGH);
+    digitalWrite(Sound_run, HIGH);
     delay(20);
-    digitalWrite(Led_run, LOW);
+    digitalWrite(Sound_run, LOW);
   }
   tme = millis() - tme;
   if (digitalRead(PIR_Sensor) == 1) {
